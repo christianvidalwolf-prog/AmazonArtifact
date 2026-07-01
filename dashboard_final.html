@@ -682,6 +682,8 @@ function renderSummary(){
   kpis += kpiCard('Units Sold', fmtNum(o.units2026), o.deltaUnitsPct, fmtPct(o.deltaUnitsPct)+' YoY', false, fmtNum(o.units2025)+' in 2025');
   kpis += kpiCard('Average Ticket', fmtEUR2(o.aov2026), o.deltaAov, (o.deltaAov>=0?'+':'')+fmtEUR2(o.deltaAov)+' YoY', false, fmtEUR2(o.aov2025)+' in 2025');
   if(!a.unavailable){
+    const deltaAdSalesPct = safeDiv(a.attribSales2026-a.attribSales2025, a.attribSales2025);
+    kpis += kpiCard('Ad Sales', fmtEUR(a.attribSales2026), deltaAdSalesPct, fmtPct(deltaAdSalesPct)+' YoY', false, fmtEUR(a.attribSales2025)+' in 2025');
     kpis += kpiCard('Ad Spend', fmtEUR(a.spend2026), a.deltaSpendPct, fmtPct(a.deltaSpendPct)+' YoY', true, fmtEUR(a.spend2025)+' in 2025');
     kpis += kpiCard('ACOS', fmtPctRaw(a.acos2026), a.acos2026-a.acos2025, fmtPP(a.acos2026-a.acos2025)+' YoY', true, fmtPctRaw(a.acos2025)+' in 2025');
     kpis += kpiCard('TACOS', fmtPctRaw(a.tacos2026), a.tacos2026-a.tacos2025, fmtPP(a.tacos2026-a.tacos2025)+' YoY', true, fmtPctRaw(a.tacos2025)+' in 2025');
