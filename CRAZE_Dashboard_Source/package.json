@@ -1,0 +1,17 @@
+{
+  "name": "craze-performance-dashboard",
+  "version": "1.0.0",
+  "description": "Executive dashboard for CRAZE GmbH H1 2025 vs 2026 performance",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "python3 build.py --output ../dashboard_final.html",
+    "test": "node smoketest.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {},
+  "author": "Antigravity",
+  "license": "ISC"
+}
