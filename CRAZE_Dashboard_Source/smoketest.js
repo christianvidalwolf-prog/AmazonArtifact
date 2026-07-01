@@ -43,16 +43,16 @@ const testCode = `
 try {
   console.log('BRANDS count', BRANDS.length);
   initFilters();
-  ['summary','sellin','country','returns','ads','products','insights','ask'].forEach(tab=>{
+  ['summary','sellin','country','returns','ads','products','es-gap','insights','ask'].forEach(tab=>{
     switchTab(tab);
     console.log('OK tab:', tab);
   });
 
   state.countries = new Set(['ES']);
-  ['summary','sellin','country','returns','ads','products'].forEach(tab=>{ switchTab(tab); console.log('OK ES filter tab:', tab); });
+  ['summary','sellin','country','returns','ads','products','es-gap'].forEach(tab=>{ switchTab(tab); console.log('OK ES filter tab:', tab); });
 
   state.countries = new Set(['ES','FR','IT']);
-  ['summary','sellin','country','returns','ads','products'].forEach(tab=>{ switchTab(tab); console.log('OK ES+FR+IT filter tab:', tab); });
+  ['summary','sellin','country','returns','ads','products','es-gap'].forEach(tab=>{ switchTab(tab); console.log('OK ES+FR+IT filter tab:', tab); });
 
   state.countries = new Set(['PL']);
   switchTab('ads');
@@ -73,6 +73,10 @@ try {
   state.countries = new Set(ALL_COUNTRIES); state.brand = 'INKEE'; state.q='';
   switchTab('products'); console.log('OK brand filter products');
   switchTab('ads'); console.log('OK brand filter ads');
+  switchTab('es-gap');
+  const esGapInkee = getEsGapRows();
+  if(esGapInkee.some(r=>r.brand!=='INKEE')) throw new Error('es-gap brand filter leaked non-INKEE rows');
+  console.log('OK brand filter es-gap, rows:', esGapInkee.length);
 
   state.brand='ALL'; state.q='bath bomb';
   switchTab('products'); console.log('OK search filter products');

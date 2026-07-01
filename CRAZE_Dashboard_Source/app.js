@@ -21,6 +21,7 @@ const COUNTRY_NAMES = {AE:'UAE',BE:'Belgium',DE:'Germany',EG:'Egypt',ES:'Spain',
 const ADS_COUNTRIES = ['DE','ES','FR','IT','GB'];
 const COUNTRY_COLORS = {DE:'#3B5BA5',ES:'#B8752E',FR:'#1E8E5A',IT:'#7B5EA7',GB:'#C0392B',SE:'#2C8FA8',NL:'#C9962E',PL:'#5E8C61',BE:'#8677B5',IE:'#4FA187',SA:'#B86B6B',AE:'#6E97C7',EG:'#A8ADB8'};
 const ALL_COUNTRIES = SELLIN.byCountry.map(c=>c.country);
+const ES_GAP_MIN_REVENUE = 500;
 
 // ================= Lookup maps =================
 const sellinMap = {}; SELLIN.products.forEach(p=>{ sellinMap[p.asin]=p; });
@@ -213,6 +214,29 @@ function getAdsByCountryRows(){
     return agg;
   }).filter(a=>a.spend2025>0||a.spend2026>0);
 }
+
+// Products with meaningful 2026 revenue in other countries but no 2026 revenue in Spain.
+// Country filter is intentionally ignored — the whole point is comparing presence across countries.
+function getEsGapRows(){
+  const countriesByAsin = {};
+  SELLIN.productsByCountry.forEach(r=>{
+    if(r.r6>0){
+      if(!countriesByAsin[r.a]) countriesByAsin[r.a] = new Set();
+      countriesByAsin[r.a].add(r.c);
+    }
+  });
+  return SELLIN.products
+    .filter(p=> p.revenue2026>0)
+    .filter(p=> !(countriesByAsin[p.asin] && countriesByAsin[p.asin].has('ES')))
+    .filter(p=> p.revenue2026 > ES_GAP_MIN_REVENUE)
+    .filter(p=> matchesBrandSearch(p.brand,p.asin,p.title))
+    .map(p=>{
+      const countries = countriesByAsin[p.asin] ? [...countriesByAsin[p.asin]].sort() : [];
+      const countriesLabel = countries.length<=3 ? countries.join(', ') : countries.slice(0,3).join(', ')+' +'+(countries.length-3);
+      return {asin:p.asin, brand:p.brand, title:p.title, revenue2026:p.revenue2026, units2026:p.units2026,
+        countryCount: countries.length, countriesLabel};
+    });
+}
 // ================= Chart.js theme =================
 function isDarkMode() {
   if (typeof document === 'undefined' || !document.documentElement) return true;
@@ -346,6 +370,7 @@ const TABS = [
   {id:'returns', label:'Returns Analysis'},
   {id:'ads', label:'Advertising Performance'},
   {id:'products', label:'Product Winners & Losers'},
+  {id:'es-gap', label:'España — Oportunidades'},
   {id:'insights', label:'Key Insights & Recommendations'},
   {id:'ask', label:'Ask the Data'},
 ];
@@ -821,6 +846,44 @@ function renderAsk(){
   send.addEventListener('click', submit);
   input.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
 }
+// ================================= SPAIN GAP =================================
+function renderEsGap(){
+  const rows = getEsGapRows();
+  const totalOutsideEs = sum(rows,'revenue2026');
+  const shareOfCompany = safeDiv(totalOutsideEs, SELLIN.overall.revenue2026);
+  const brandTotals = {};
+  rows.forEach(r=>{ brandTotals[r.brand] = (brandTotals[r.brand]||0) + r.revenue2026; });
+  let topBrand = {brand:'—', revenue:0};
+  Object.entries(brandTotals).forEach(([b,rev])=>{ if(rev>topBrand.revenue) topBrand={brand:b,revenue:rev}; });
+
+  let scopeParts = [];
+  scopeParts.push(state.brand==='ALL' ? 'All brands' : state.brand);
+  if(state.q) scopeParts.push('"'+state.q+'"');
+
+  const banner = `<div class="banner">This table surfaces <b>candidates</b> for a Spain expansion gap — it does not confirm an oversight. There may be a deliberate reason (launch sequencing, listing not yet created, a regulatory issue). Minimum threshold: ${fmtEUR(ES_GAP_MIN_REVENUE)} 2026 revenue outside Spain.</div>`;
+
+  let kpis = '';
+  kpis += kpiCard('Revenue Outside Spain', fmtEUR(totalOutsideEs), null, '2026, not sold in Spain', false);
+  kpis += kpiCard('Share of Company Revenue', fmtPctRaw(shareOfCompany), null, 'of total 2026 sell-in revenue', false);
+  kpis += kpiCard('Candidate Products', fmtNum(rows.length), null, 'ASINs sold elsewhere, absent in Spain', false);
+  kpis += kpiCard('Top Brand in List', esc(topBrand.brand), null, fmtEUR(topBrand.revenue)+' in this list', false);
+
+  registerTable('es-gap', rows, [
+    {key:'title', label:'Product', left:true}, {key:'brand', label:'Brand', left:true},
+    {key:'revenue2026', label:'Revenue 2026'}, {key:'units2026', label:'Units 2026'},
+    {key:'countryCount', label:'# Countries'}, {key:'countriesLabel', label:'Countries', left:true},
+  ], r=> `<tr><td class="left">${productCell(r.asin,r.title)}</td><td class="left">${esc(r.brand)}</td>
+    <td>${fmtEUR(r.revenue2026)}</td><td>${fmtNum(r.units2026)}</td>
+    <td>${r.countryCount}</td><td class="left">${esc(r.countriesLabel)}</td></tr>`, 'revenue2026', 'desc');
+
+  document.getElementById('content').innerHTML = `
+  <section class="section active" id="tab-es-gap">
+    <div class="row-title"><div><h2 class="section-title">Spain — Opportunities</h2><div class="section-desc">Products sold elsewhere with no 2026 revenue in Spain &middot; Country filter does not apply here (see banner) &middot; Scope: ${esc(scopeParts.join(' · '))}</div></div></div>
+    ${banner}
+    <div class="grid grid-4 block">${kpis}</div>
+    <div class="panel"><div class="panel-title">Products sold elsewhere, absent from Spain</div><div class="panel-sub">Sorted by 2026 revenue &middot; minimum ${fmtEUR(ES_GAP_MIN_REVENUE)} threshold</div>${tableContainer('es-gap')}</div>
+  </section>`;
+}
 // ================================= INSIGHTS =================================
 function renderInsights(){
   document.getElementById('content').innerHTML = `
@@ -866,7 +929,7 @@ function renderInsights(){
 }
 
 // ================================= TAB SWITCHING =================================
-const RENDERERS = { summary:renderSummary, sellin:renderSellIn, country:renderCountry, returns:renderReturns, ads:renderAds, products:renderProducts, insights:renderInsights, ask:renderAsk };
+const RENDERERS = { summary:renderSummary, sellin:renderSellIn, country:renderCountry, returns:renderReturns, ads:renderAds, products:renderProducts, 'es-gap':renderEsGap, insights:renderInsights, ask:renderAsk };
 
 function switchTab(id){
   activeTab = id;
