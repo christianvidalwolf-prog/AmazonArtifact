@@ -77,6 +77,10 @@ try {
   const esGapInkee = getEsGapRows();
   if(esGapInkee.some(r=>r.brand!=='INKEE')) throw new Error('es-gap brand filter leaked non-INKEE rows');
   console.log('OK brand filter es-gap, rows:', esGapInkee.length);
+  const esGapDeInkee = getEsGapDeRows();
+  if(esGapDeInkee.some(r=>r.brand!=='INKEE')) throw new Error('es-gap-de brand filter leaked non-INKEE rows');
+  if(esGapDeInkee.some(r=>!['High','Medium','Low'].includes(r.priority))) throw new Error('es-gap-de produced an invalid priority value');
+  console.log('OK brand filter es-gap-de, rows:', esGapDeInkee.length);
 
   state.brand='ALL'; state.q='bath bomb';
   switchTab('products'); console.log('OK search filter products');

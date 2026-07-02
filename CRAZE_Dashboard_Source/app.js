@@ -234,7 +234,40 @@ function getEsGapRows(){
       const countries = countriesByAsin[p.asin] ? [...countriesByAsin[p.asin]].sort() : [];
       const countriesLabel = countries.length<=3 ? countries.join(', ') : countries.slice(0,3).join(', ')+' +'+(countries.length-3);
       return {asin:p.asin, brand:p.brand, title:p.title, revenue2026:p.revenue2026, units2026:p.units2026,
-        countryCount: countries.length, countriesLabel};
+        countries, countryCount: countries.length, countriesLabel};
+    });
+}
+
+// Germany-sold candidates from getEsGapRows(), enriched with Germany-specific revenue/AOV/
+// return-rate/ACOS and a Priority signal (brand already live in Spain de-risks VAT/GPSR
+// registration; a return rate well above the company average is a product-fit red flag).
+function getEsGapDeRows(){
+  const deByAsin = {};
+  SELLIN.productsByCountry.forEach(r=>{ if(r.c==='DE') deByAsin[r.a] = r; });
+  const deAdsByAsin = {};
+  ADS.adsByProductCountry.forEach(r=>{ if(r.c==='DE') deAdsByAsin[r.a] = r; });
+  const brandLiveInEs = new Set();
+  SELLIN.productsByCountry.forEach(r=>{ if(r.c==='ES' && r.r6>0) brandLiveInEs.add(r.b); });
+  const companyReturnRate = SELLIN.overall.returnRate2026;
+
+  return getEsGapRows()
+    .filter(r=> r.countries.includes('DE'))
+    .map(r=>{
+      const de = deByAsin[r.asin];
+      const ads = deAdsByAsin[r.asin];
+      const revenueDe2026 = de ? de.r6 : 0;
+      const unitsDe2026 = de ? de.u6 : 0;
+      const aovDe2026 = safeDiv(revenueDe2026, unitsDe2026);
+      const returnRateDe2026 = safeDiv(de ? de.rt6 : 0, unitsDe2026);
+      const acosDe2026 = (ads && ads.ac6!==undefined) ? ads.ac6 : null;
+      const brandAlreadyInEs = brandLiveInEs.has(r.brand);
+      const returnRateHigh = returnRateDe2026!==null && companyReturnRate!==null && returnRateDe2026 > companyReturnRate*1.5;
+      const returnRateHealthy = returnRateDe2026===null || companyReturnRate===null || returnRateDe2026 <= companyReturnRate*1.2;
+      let priority = 'Medium';
+      if(returnRateHigh) priority = 'Low';
+      else if(brandAlreadyInEs && returnRateHealthy) priority = 'High';
+      return {asin:r.asin, brand:r.brand, title:r.title, revenueDe2026, unitsDe2026, aovDe2026,
+        returnRateDe2026, acosDe2026, brandAlreadyInEs, priority};
     });
 }
 // ================= Chart.js theme =================
@@ -358,6 +391,12 @@ function statusBadge(st){
   if(st==='new') return '<span class="status-badge status-new">New</span>';
   if(st==='discontinued') return '<span class="status-badge status-discontinued">Discontinued</span>';
   return '';
+}
+
+function priorityBadge(p){
+  if(p==='High') return '<span class="status-badge status-new">High</span>';
+  if(p==='Low') return '<span class="status-badge status-discontinued">Low</span>';
+  return '<span class="status-badge" style="background:var(--panel2);color:var(--text-dim)">Medium</span>';
 }
 
 function productCell(asin,title){
@@ -848,27 +887,51 @@ function renderAsk(){
 }
 // ================================= SPAIN GAP =================================
 function renderEsGap(){
-  const rows = getEsGapRows();
-  const totalOutsideEs = sum(rows,'revenue2026');
-  const shareOfCompany = safeDiv(totalOutsideEs, SELLIN.overall.revenue2026);
-  const brandTotals = {};
-  rows.forEach(r=>{ brandTotals[r.brand] = (brandTotals[r.brand]||0) + r.revenue2026; });
-  let topBrand = {brand:'—', revenue:0};
-  Object.entries(brandTotals).forEach(([b,rev])=>{ if(rev>topBrand.revenue) topBrand={brand:b,revenue:rev}; });
+  const deRows = getEsGapDeRows();
+  const otherRows = getEsGapRows().filter(r=> !r.countries.includes('DE'));
+
+  const totalDeRevenue = sum(deRows,'revenueDe2026');
+  const shareOfCompany = safeDiv(totalDeRevenue, SELLIN.overall.revenue2026);
+  const highCount = deRows.filter(r=>r.priority==='High').length;
 
   let scopeParts = [];
   scopeParts.push(state.brand==='ALL' ? 'All brands' : state.brand);
   if(state.q) scopeParts.push('"'+state.q+'"');
 
-  const banner = `<div class="banner">This table surfaces <b>candidates</b> for a Spain expansion gap — it does not confirm an oversight. There may be a deliberate reason (launch sequencing, listing not yet created, a regulatory issue). Minimum threshold: ${fmtEUR(ES_GAP_MIN_REVENUE)} 2026 revenue outside Spain.</div>`;
+  const banner = `<div class="banner">This table surfaces <b>candidates</b> for a Germany → Spain expansion gap — it does not confirm an oversight. Plausible deliberate reasons include the EU GPSR Responsible Person requirement, Pan-EU VAT registration thresholds, EN71 toy-safety certification, or launch sequencing. Minimum threshold: ${fmtEUR(ES_GAP_MIN_REVENUE)} 2026 revenue.</div>`;
 
   let kpis = '';
-  kpis += kpiCard('Revenue Outside Spain', fmtEUR(totalOutsideEs), null, '2026, not sold in Spain', false);
+  kpis += kpiCard('Revenue in Germany (ES gap)', fmtEUR(totalDeRevenue), null, deRows.length+' candidate product'+(deRows.length===1?'':'s'), false);
   kpis += kpiCard('Share of Company Revenue', fmtPctRaw(shareOfCompany), null, 'of total 2026 sell-in revenue', false);
-  kpis += kpiCard('Candidate Products', fmtNum(rows.length), null, 'ASINs sold elsewhere, absent in Spain', false);
-  kpis += kpiCard('Top Brand in List', esc(topBrand.brand), null, fmtEUR(topBrand.revenue)+' in this list', false);
+  kpis += kpiCard('High-Priority Candidates', fmtNum(highCount), null, 'brand already live in Spain, healthy return rate', false);
+  kpis += kpiCard('Other-Country Candidates', fmtNum(otherRows.length), null, 'sold elsewhere (not Germany), not in Spain', false);
 
-  registerTable('es-gap', rows, [
+  let insight = '';
+  const topPick = deRows.slice().sort((a,b)=> (b.priority==='High'?1:0)-(a.priority==='High'?1:0) || b.revenueDe2026-a.revenueDe2026)[0];
+  if(topPick){
+    const aovTxt = topPick.aovDe2026!==null ? fmtEUR2(topPick.aovDe2026) : 'n/a';
+    const retTxt = topPick.returnRateDe2026!==null ? fmtPctRaw(topPick.returnRateDe2026) : 'n/a';
+    const shortTitle = topPick.title.length>60 ? topPick.title.slice(0,60)+'…' : topPick.title;
+    if(topPick.brandAlreadyInEs){
+      insight = `<div class="insight-card good"><span class="tag">Top candidate</span><p><b>${esc(shortTitle)}</b> (${esc(topPick.brand)}) sold ${fmtEUR(topPick.revenueDe2026)} in Germany in 2026 (AOV ${aovTxt}, return rate ${retTxt}) with zero 2026 revenue in Spain. ${esc(topPick.brand)} already sells in Spain, so VAT registration and an EU GPSR Responsible Person are most likely already in place — this is the lowest-friction candidate in the list.</p></div>`;
+    } else {
+      insight = `<div class="insight-card warn"><span class="tag">Top candidate</span><p><b>${esc(shortTitle)}</b> (${esc(topPick.brand)}) sold ${fmtEUR(topPick.revenueDe2026)} in Germany in 2026 (AOV ${aovTxt}, return rate ${retTxt}) with zero 2026 revenue in Spain. ${esc(topPick.brand)} has no presence in Spain today — check EU GPSR Responsible Person and VAT registration before treating this as a quick win.</p></div>`;
+    }
+  }
+
+  registerTable('es-gap-de', deRows, [
+    {key:'title', label:'Product', left:true}, {key:'brand', label:'Brand', left:true},
+    {key:'revenueDe2026', label:'Revenue DE 2026'}, {key:'aovDe2026', label:'AOV DE 2026'},
+    {key:'returnRateDe2026', label:'Return Rate DE'}, {key:'acosDe2026', label:'ACOS DE 2026'},
+    {key:'brandAlreadyInEs', label:'Brand Live in ES'}, {key:'priority', label:'Priority'},
+  ], r=> `<tr><td class="left">${productCell(r.asin,r.title)}</td><td class="left">${esc(r.brand)}</td>
+    <td>${fmtEUR(r.revenueDe2026)}</td><td>${fmtEUR2(r.aovDe2026)}</td>
+    <td class="${r.returnRateDe2026!==null && r.returnRateDe2026>SELLIN.overall.returnRate2026*1.5?'neg-text':''}">${fmtPctRaw(r.returnRateDe2026)}</td>
+    <td>${r.acosDe2026!==null?fmtPctRaw(r.acosDe2026):'—'}</td>
+    <td class="${r.brandAlreadyInEs?'pos-text':'neg-text'}">${r.brandAlreadyInEs?'Yes':'No'}</td>
+    <td>${priorityBadge(r.priority)}</td></tr>`, 'revenueDe2026', 'desc');
+
+  registerTable('es-gap-other', otherRows, [
     {key:'title', label:'Product', left:true}, {key:'brand', label:'Brand', left:true},
     {key:'revenue2026', label:'Revenue 2026'}, {key:'units2026', label:'Units 2026'},
     {key:'countryCount', label:'# Countries'}, {key:'countriesLabel', label:'Countries', left:true},
@@ -878,10 +941,12 @@ function renderEsGap(){
 
   document.getElementById('content').innerHTML = `
   <section class="section active" id="tab-es-gap">
-    <div class="row-title"><div><h2 class="section-title">Spain — Opportunities</h2><div class="section-desc">Products sold elsewhere with no 2026 revenue in Spain &middot; Country filter does not apply here (see banner) &middot; Scope: ${esc(scopeParts.join(' · '))}</div></div></div>
+    <div class="row-title"><div><h2 class="section-title">Spain — Opportunities</h2><div class="section-desc">Germany-sold products absent from Spain, prioritized by revenue and risk signals &middot; Country filter does not apply here (see banner) &middot; Scope: ${esc(scopeParts.join(' · '))}</div></div></div>
     ${banner}
     <div class="grid grid-4 block">${kpis}</div>
-    <div class="panel"><div class="panel-title">Products sold elsewhere, absent from Spain</div><div class="panel-sub">Sorted by 2026 revenue &middot; minimum ${fmtEUR(ES_GAP_MIN_REVENUE)} threshold</div>${tableContainer('es-gap')}</div>
+    ${insight}
+    <div class="panel block"><div class="panel-title">Germany → Spain gap</div><div class="panel-sub">Sorted by 2026 revenue in Germany &middot; Priority: High = brand already live in Spain and a healthy return rate, Low = return rate notably above the company average</div>${tableContainer('es-gap-de')}</div>
+    <div class="panel"><div class="panel-title">Other countries, not sold in Spain</div><div class="panel-sub">Same gap logic for markets other than Germany &middot; minimum ${fmtEUR(ES_GAP_MIN_REVENUE)} threshold</div>${tableContainer('es-gap-other')}</div>
   </section>`;
 }
 // ================================= INSIGHTS =================================
