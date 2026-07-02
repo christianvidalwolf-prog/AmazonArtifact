@@ -43,7 +43,7 @@ const testCode = `
 try {
   console.log('BRANDS count', BRANDS.length);
   initFilters();
-  ['summary','sellin','country','returns','ads','products','es-gap','insights','ask'].forEach(tab=>{
+  ['summary','sellin','country','returns','ads','products','es-gap','insights'].forEach(tab=>{
     switchTab(tab);
     console.log('OK tab:', tab);
   });
@@ -88,14 +88,7 @@ try {
   productsSubtab='units';
   switchTab('products'); console.log('OK units subtab');
 
-  switchTab('ask');
-  await sendAskQuestion('Which country is driving growth?');
-  console.log('OK ask round-trip #1, messages:', askMessages.length, JSON.stringify(askMessages[1]));
-  await sendAskQuestion('And what about returns?');
-  console.log('OK ask round-trip #2, messages:', askMessages.length);
-  askMessages.push({role:'user', text:'third question'});
-  const apiMsgsCheck = buildApiMessages('third question');
-  console.log('OK buildApiMessages turns:', apiMsgsCheck.length, apiMsgsCheck.map(m=>m.role).join(','));
+
 
   console.log('ALL SMOKE TESTS PASSED');
 } catch(e){

@@ -720,7 +720,6 @@ const TABS = [
   {id:'products', label:'Product Winners & Losers'},
   {id:'es-gap', label:'España — Oportunidades'},
   {id:'insights', label:'Key Insights & Recommendations'},
-  {id:'ask', label:'Ask the Data'},
 ];
 let productsSubtab = 'revenue';
 
@@ -1057,143 +1056,7 @@ function renderProducts(){
     </div>
   </section>`;
 }
-// ================================= ASK THE DATA (Claude Q&A) =================================
-let askMessages = []; // {role:'user'|'assistant', text, error?}
-let askLoading = false;
 
-function escNl(s){ return esc(s).replace(/\n/g,'<br>'); }
-
-function buildDataContext(){
-  const o = getSellinOverall();
-  const a = getAdsOverall();
-  const byCountry = getByCountryRows().slice().sort((x,y)=>y.revenue2026-x.revenue2026);
-  const prodRows = getSellinProductRows();
-  const growers = prodRows.slice().sort((x,y)=>y.deltaRevenue-x.deltaRevenue).slice(0,8);
-  const fallers = prodRows.slice().sort((x,y)=>x.deltaRevenue-y.deltaRevenue).slice(0,8);
-  const returnsTop = prodRows.slice().sort((x,y)=>y.returns2026-x.returns2026).slice(0,5);
-  const adsByCountry = getAdsByCountryRows();
-
-  let lines = [];
-  lines.push('You are answering questions about CRAZE GmbH\'s Amazon H1 (weeks 1-26) performance dashboard, comparing 2025 vs 2026: sell-in revenue, returns and advertising across EU marketplaces.');
-  lines.push('Current filter scope applied by the user in the dashboard: ' + scopeLabel() + '. All numbers below already reflect this scope — answer within it unless the user clearly asks about something outside it.');
-  lines.push('Sell-in = Ordered revenue / Ordered units (verified against the raw Vendor Central export). Ads data only covers DE, ES, FR, IT and UK — 5 of the 13 sell-in markets.');
-  lines.push('ACOS = Ad Spend / Attributed Sales. TACOS = Ad Spend / Sell-In Revenue.');
-  lines.push('');
-  lines.push('OVERALL SELL-IN: Revenue 2025 \u20AC'+Math.round(o.revenue2025)+' -> 2026 \u20AC'+Math.round(o.revenue2026)+' ('+fmtPct(o.deltaRevenuePct)+'). Units 2025 '+o.units2025+' -> 2026 '+o.units2026+' ('+fmtPct(o.deltaUnitsPct)+'). AOV 2025 \u20AC'+(o.aov2025!==null?o.aov2025.toFixed(2):'n/a')+' -> 2026 \u20AC'+(o.aov2026!==null?o.aov2026.toFixed(2):'n/a')+'. Returns 2025 '+o.returns2025+' -> 2026 '+o.returns2026+', return rate '+fmtPctRaw(o.returnRate2025)+' -> '+fmtPctRaw(o.returnRate2026)+'.');
-  if(!a.unavailable){
-    lines.push('OVERALL ADS: Spend 2025 \u20AC'+Math.round(a.spend2025)+' -> 2026 \u20AC'+Math.round(a.spend2026)+' ('+fmtPct(a.deltaSpendPct)+'). ACOS '+fmtPctRaw(a.acos2025)+' -> '+fmtPctRaw(a.acos2026)+'. TACOS '+fmtPctRaw(a.tacos2025)+' -> '+fmtPctRaw(a.tacos2026)+'.');
-  } else {
-    lines.push('OVERALL ADS: no ads data available for the currently selected countries (ads only covers DE/ES/FR/IT/UK).');
-  }
-  lines.push('');
-  lines.push('BY COUNTRY (revenue 2025->2026, delta%): ' + (byCountry.length? byCountry.map(c=> c.country+': \u20AC'+Math.round(c.revenue2025)+'->\u20AC'+Math.round(c.revenue2026)+' ('+fmtPct(c.deltaRevenuePct)+')').join(' | ') : 'none in current scope'));
-  if(adsByCountry.length){
-    lines.push('ADS BY COUNTRY (spend26, ACOS26, TACOS26): ' + adsByCountry.map(c=> c.country+': \u20AC'+Math.round(c.spend2026)+', ACOS '+fmtPctRaw(c.acos2026)+', TACOS '+fmtPctRaw(c.tacos2026)).join(' | '));
-  }
-  lines.push('');
-  lines.push('TOP GROWING PRODUCTS (by revenue delta, in scope): ' + (growers.length? growers.map(p=> p.title.slice(0,50)+' ['+p.brand+', '+p.asin+']: '+fmtEUR(p.deltaRevenue)+' ('+fmtPct(p.deltaRevenuePct)+')').join(' | ') : 'none'));
-  lines.push('TOP FALLING PRODUCTS (by revenue delta, in scope): ' + (fallers.length? fallers.map(p=> p.title.slice(0,50)+' ['+p.brand+', '+p.asin+']: '+fmtEUR(p.deltaRevenue)+' ('+fmtPct(p.deltaRevenuePct)+')').join(' | ') : 'none'));
-  lines.push('TOP RETURNS 2026 (in scope): ' + (returnsTop.length? returnsTop.map(p=> p.title.slice(0,40)+': '+p.returns2026+' returns').join(' | ') : 'none'));
-  lines.push('TOP AD SPEND BY BRAND 2026 (account-wide, not scope-limited): ' + ADS.adsByBrand.slice(0,10).map(b=> b.brand+': \u20AC'+Math.round(b.spend2026)+', ACOS '+fmtPctRaw(b.acos2026)+', TACOS '+fmtPctRaw(b.tacos2026)).join(' | '));
-  lines.push('');
-  lines.push('Answer concisely and specifically, citing concrete numbers from the data above in EUR/% as shown. If the question needs data not included in this summary (e.g. a specific ASIN not listed here), say so plainly and suggest checking the relevant dashboard tab/table rather than guessing or inventing a number. Keep answers under ~150 words unless the user explicitly asks for more detail. No markdown headers — plain prose and short lists only.');
-  return lines.join('\n');
-}
-
-function buildApiMessages(newQuestion){
-  const context = buildDataContext();
-  const priorTurns = askMessages.slice(0, -1); // everything except the just-appended new question
-  const msgs = [];
-  if(priorTurns.length===0){
-    msgs.push({role:'user', content: context + '\n\nQuestion: ' + newQuestion});
-    return msgs;
-  }
-  msgs.push({role:'user', content: context + '\n\nQuestion: ' + priorTurns[0].text});
-  for(let i=1;i<priorTurns.length;i++){
-    msgs.push({role: priorTurns[i].role, content: priorTurns[i].text});
-  }
-  msgs.push({role:'user', content: newQuestion});
-  return msgs;
-}
-
-async function sendAskQuestion(question){
-  askMessages.push({role:'user', text:question});
-  askLoading = true;
-  renderAskMessages();
-  try {
-    const apiMessages = buildApiMessages(question);
-    const response = await fetch('/api/ask', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ messages: apiMessages })
-    });
-    const data = await response.json();
-    if(!response.ok){
-      const msg = (data && data.error && data.error.message) ? data.error.message : ('Request failed ('+response.status+')');
-      throw new Error(msg);
-    }
-    const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
-    askMessages.push({role:'assistant', text: text || 'No response text was returned.'});
-  } catch(e){
-    askMessages.push({role:'assistant', text: 'Could not reach Claude: ' + e.message, error:true});
-  } finally {
-    askLoading = false;
-    renderAskMessages();
-  }
-}
-
-function askQuick(q){ if(askLoading) return; const input = document.getElementById('ask-input'); if(input) input.value=''; sendAskQuestion(q); }
-
-function renderAskMessages(){
-  const el = document.getElementById('ask-messages');
-  if(!el) return;
-  if(askMessages.length===0){
-    el.innerHTML = `<div class="empty-state" style="padding:50px 20px;">Ask anything about this dataset — growth drivers, ad efficiency, specific products, countries or brands. Answers are grounded in the numbers currently shown in the dashboard and respect your active filters.</div>`;
-  } else {
-    el.innerHTML = askMessages.map(m=> `
-      <div class="ask-msg ${m.role}">
-        <div class="ask-role">${m.role==='user'?'You':'Claude'}</div>
-        <div class="ask-bubble ${m.error?'error':''}">${escNl(m.text)}</div>
-      </div>`).join('') + (askLoading? `<div class="ask-msg assistant"><div class="ask-role">Claude</div><div class="ask-bubble loading"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>` : '');
-  }
-  el.scrollTop = el.scrollHeight;
-  const input = document.getElementById('ask-input');
-  const send = document.getElementById('ask-send');
-  if(input) input.disabled = askLoading;
-  if(send) send.disabled = askLoading;
-}
-
-function renderAsk(){
-  document.getElementById('content').innerHTML = `
-  <section class="section active" id="tab-ask">
-    <div class="row-title"><div><h2 class="section-title">Ask the Data</h2><div class="section-desc">Powered by Claude &middot; answers use the KPIs, breakdowns and top movers currently in scope: ${esc(scopeLabel())}</div></div></div>
-    <div class="panel ask-panel">
-      <div id="ask-messages" class="ask-messages"></div>
-      <div class="ask-inputbar">
-        <div class="ask-chips" id="ask-chips"></div>
-        <div class="ask-row">
-          <input type="text" id="ask-input" placeholder="Ask about revenue, ACOS, returns, a product or a country…">
-          <button class="btn primary" id="ask-send">Ask</button>
-        </div>
-      </div>
-    </div>
-  </section>`;
-
-  renderAskMessages();
-  const suggestions = ['Which country is driving growth?', 'What should we do about BLADE ad spend?', 'Is our ad spend efficient?', 'Where are returns rising and why?'];
-  document.getElementById('ask-chips').innerHTML = suggestions.map(s=> `<button type="button" class="chip" onclick="askQuick(${JSON.stringify(s)})">${esc(s)}</button>`).join('');
-
-  const input = document.getElementById('ask-input');
-  const send = document.getElementById('ask-send');
-  function submit(){
-    const v = input.value.trim();
-    if(!v || askLoading) return;
-    input.value='';
-    sendAskQuestion(v);
-  }
-  send.addEventListener('click', submit);
-  input.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
-}
 // ================================= SPAIN GAP =================================
 function renderEsGap(){
   const deRows = getEsGapDeRows();
@@ -1303,7 +1166,7 @@ function renderInsights(){
 }
 
 // ================================= TAB SWITCHING =================================
-const RENDERERS = { summary:renderSummary, sellin:renderSellIn, country:renderCountry, returns:renderReturns, ads:renderAds, products:renderProducts, 'es-gap':renderEsGap, insights:renderInsights, ask:renderAsk };
+const RENDERERS = { summary:renderSummary, sellin:renderSellIn, country:renderCountry, returns:renderReturns, ads:renderAds, products:renderProducts, 'es-gap':renderEsGap, insights:renderInsights };
 
 function switchTab(id){
   activeTab = id;
