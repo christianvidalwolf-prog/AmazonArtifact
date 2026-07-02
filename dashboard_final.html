@@ -305,6 +305,7 @@ const ADS_COUNTRIES = ['DE','ES','FR','IT','GB'];
 const COUNTRY_COLORS = {DE:'#3B5BA5',ES:'#B8752E',FR:'#1E8E5A',IT:'#7B5EA7',GB:'#C0392B',SE:'#2C8FA8',NL:'#C9962E',PL:'#5E8C61',BE:'#8677B5',IE:'#4FA187',SA:'#B86B6B',AE:'#6E97C7',EG:'#A8ADB8'};
 const ALL_COUNTRIES = SELLIN.byCountry.map(c=>c.country);
 const ES_GAP_MIN_REVENUE = 500;
+const ES_GAP_EXCLUDED_ASINS = new Set(['B0D384KJJP', 'B0FMY5PFRC', 'B0D54F882T']);
 
 // ================= Lookup maps =================
 const sellinMap = {}; SELLIN.products.forEach(p=>{ sellinMap[p.asin]=p; });
@@ -514,6 +515,7 @@ function getEsGapRows(){
     .filter(p=> p.revenue2026>0)
     .filter(p=> !(countriesByAsin[p.asin] && countriesByAsin[p.asin].has('ES')))
     .filter(p=> p.revenue2026 > ES_GAP_MIN_REVENUE)
+    .filter(p=> !ES_GAP_EXCLUDED_ASINS.has(p.asin))
     .filter(p=> matchesBrandSearch(p.brand,p.asin,p.title))
     .map(p=>{
       const countries = countriesByAsin[p.asin] ? [...countriesByAsin[p.asin]].sort() : [];
