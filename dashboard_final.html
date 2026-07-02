@@ -102,10 +102,10 @@ h1.title{font-size:27px; font-weight:800; letter-spacing:-0.02em; margin-top:8px
 .ms-toggle:hover{border-color:var(--border-hover);}
 .ms-menu{position:absolute; top:calc(100% + 6px); left:0; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-md); padding:8px; min-width:240px; max-height:300px; overflow-y:auto; z-index:60; display:none;}
 .ms-menu.open{display:block; animation:slideUpFade 0.2s var(--ease-out) forwards;}
-.ms-menu::-webkit-scrollbar, .ask-messages::-webkit-scrollbar{width:6px;}
-.ms-menu::-webkit-scrollbar-track, .ask-messages::-webkit-scrollbar-track{background:transparent;}
-.ms-menu::-webkit-scrollbar-thumb, .ask-messages::-webkit-scrollbar-thumb{background:var(--border); border-radius:3px;}
-.ms-menu::-webkit-scrollbar-thumb:hover, .ask-messages::-webkit-scrollbar-thumb:hover{background:var(--border-hover);}
+.ms-menu::-webkit-scrollbar{width:6px;}
+.ms-menu::-webkit-scrollbar-track{background:transparent;}
+.ms-menu::-webkit-scrollbar-thumb{background:var(--border); border-radius:3px;}
+.ms-menu::-webkit-scrollbar-thumb:hover{background:var(--border-hover);}
 .ms-menu label{display:flex; align-items:center; gap:8px; padding:6px 8px; font-size:12.5px; border-radius:var(--radius-sm); cursor:pointer; color:var(--text); transition:background-color 0.15s ease;}
 .ms-menu label:hover{background:var(--panel2);}
 .ms-menu input[type=checkbox]{accent-color:var(--navy); width:14px; height:14px;}
@@ -229,32 +229,6 @@ tbody tr:last-child td{border-bottom:none;}
 
 footer.foot{margin-top:48px; padding-top:24px; border-top:1px solid var(--border); font-size:11.5px; color:var(--text-faint); display:flex; justify-content:space-between;}
 
-/* ---------- Ask the Data ---------- */
-.ask-panel{display:flex; flex-direction:column; height:600px; padding:0; overflow:hidden;}
-.ask-messages{flex:1; overflow-y:auto; padding:22px 24px;}
-.ask-inputbar{border-top:1px solid var(--border); padding:14px 18px; background:var(--panel2);}
-.ask-chips{display:flex; flex-wrap:wrap; margin-bottom:8px;}
-.chip{background:var(--panel); border:1px solid var(--border); color:var(--text-dim); padding:6px 14px; border-radius:18px; font-size:11.5px; font-weight:600; cursor:pointer; margin:3px 6px 3px 0; transition:all 0.15s ease;}
-.chip:hover{border-color:var(--border-hover); color:var(--text);}
-.ask-row{display:flex; gap:8px;}
-.ask-row input{flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:13px; font-family:var(--font-body); background:var(--panel); color:var(--text); transition:border-color 0.15s ease;}
-.ask-row input:focus{outline:none; border-color:var(--navy); box-shadow:0 0 0 3px var(--navy-soft);}
-.ask-row button{padding:10px 20px; font-weight:700; background:var(--navy); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer;}
-.ask-row button:hover{opacity:0.95;}
-.ask-msg{margin-bottom:18px; max-width:80%; clear:both;}
-.ask-msg.user{margin-left:auto;}
-.ask-msg.assistant{margin-right:auto;}
-.ask-role{font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-faint); font-weight:700; margin-bottom:6px;}
-.ask-msg.user .ask-role{text-align:right;}
-.ask-bubble{display:inline-block; text-align:left; padding:12px 16px; border-radius:14px; font-size:13.5px; line-height:1.6;}
-.ask-msg.user .ask-bubble{background:var(--navy); color:#fff; border-radius:14px 14px 3px 14px; box-shadow:var(--shadow-sm);}
-.ask-msg.assistant .ask-bubble{background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:14px 14px 14px 3px; box-shadow:var(--shadow-sm);}
-.ask-bubble.error{background:var(--neg-soft); color:var(--neg); border:1px solid var(--border);}
-.ask-bubble.loading{display:flex; gap:5px; align-items:center; padding:16px 20px;}
-.ask-bubble.loading .dot{width:6px; height:6px; border-radius:50%; background:var(--text-faint); animation:askBounce 1.2s infinite;}
-.ask-bubble.loading .dot:nth-child(2){animation-delay:.2s;}
-.ask-bubble.loading .dot:nth-child(3){animation-delay:.4s;}
-@keyframes askBounce{0%,80%,100%{opacity:.3; transform:translateY(0);} 40%{opacity:1; transform:translateY(-3px);}}
 </style>
 </head>
 <body>
@@ -528,11 +502,13 @@ function getAdsByCountryRows(){
 // Country filter is intentionally ignored — the whole point is comparing presence across countries.
 function getEsGapRows(){
   const countriesByAsin = {};
+  const esByAsin = {};
   SELLIN.productsByCountry.forEach(r=>{
     if(r.r6>0){
       if(!countriesByAsin[r.a]) countriesByAsin[r.a] = new Set();
       countriesByAsin[r.a].add(r.c);
     }
+    if(r.c==='ES') esByAsin[r.a] = r;
   });
   return SELLIN.products
     .filter(p=> p.revenue2026>0)
@@ -542,8 +518,12 @@ function getEsGapRows(){
     .map(p=>{
       const countries = countriesByAsin[p.asin] ? [...countriesByAsin[p.asin]].sort() : [];
       const countriesLabel = countries.length<=3 ? countries.join(', ') : countries.slice(0,3).join(', ')+' +'+(countries.length-3);
+      const es = esByAsin[p.asin];
+      // esRevenue2026/esUnits2026 are always 0 here by construction (that's why the ASIN is in this list);
+      // esRevenue2025/esUnits2025 tell "never sold in Spain" (0) apart from "was sold, discontinued" (>0).
       return {asin:p.asin, brand:p.brand, title:p.title, revenue2026:p.revenue2026, units2026:p.units2026,
-        countries, countryCount: countries.length, countriesLabel};
+        countries, countryCount: countries.length, countriesLabel,
+        esRevenue2025: es ? es.r5 : 0, esUnits2025: es ? es.u5 : 0};
     });
 }
 
@@ -576,7 +556,8 @@ function getEsGapDeRows(){
       if(returnRateHigh) priority = 'Low';
       else if(brandAlreadyInEs && returnRateHealthy) priority = 'High';
       return {asin:r.asin, brand:r.brand, title:r.title, revenueDe2026, unitsDe2026, aovDe2026,
-        returnRateDe2026, acosDe2026, brandAlreadyInEs, priority};
+        returnRateDe2026, acosDe2026, brandAlreadyInEs, priority,
+        esRevenue2025:r.esRevenue2025, esUnits2025:r.esUnits2025};
     });
 }
 // ================= Chart.js theme =================
@@ -1093,10 +1074,13 @@ function renderEsGap(){
 
   registerTable('es-gap-de', deRows, [
     {key:'title', label:'Product', left:true}, {key:'brand', label:'Brand', left:true},
+    {key:'esRevenue2025', label:'ES Revenue 2025'}, {key:'esUnits2025', label:'ES Units 2025'},
     {key:'revenueDe2026', label:'Revenue DE 2026'}, {key:'aovDe2026', label:'AOV DE 2026'},
     {key:'returnRateDe2026', label:'Return Rate DE'}, {key:'acosDe2026', label:'ACOS DE 2026'},
     {key:'brandAlreadyInEs', label:'Brand Live in ES'}, {key:'priority', label:'Priority'},
   ], r=> `<tr><td class="left">${productCell(r.asin,r.title)}</td><td class="left">${esc(r.brand)}</td>
+    <td class="${r.esRevenue2025>0?'neg-text':''}">${r.esRevenue2025>0?fmtEUR2(r.esRevenue2025):'Never sold'}</td>
+    <td>${r.esRevenue2025>0?fmtNum(r.esUnits2025):'—'}</td>
     <td>${fmtEUR(r.revenueDe2026)}</td><td>${fmtEUR2(r.aovDe2026)}</td>
     <td class="${r.returnRateDe2026!==null && r.returnRateDe2026>SELLIN.overall.returnRate2026*1.5?'neg-text':''}">${fmtPctRaw(r.returnRateDe2026)}</td>
     <td>${r.acosDe2026!==null?fmtPctRaw(r.acosDe2026):'—'}</td>
@@ -1105,9 +1089,12 @@ function renderEsGap(){
 
   registerTable('es-gap-other', otherRows, [
     {key:'title', label:'Product', left:true}, {key:'brand', label:'Brand', left:true},
+    {key:'esRevenue2025', label:'ES Revenue 2025'}, {key:'esUnits2025', label:'ES Units 2025'},
     {key:'revenue2026', label:'Revenue 2026'}, {key:'units2026', label:'Units 2026'},
     {key:'countryCount', label:'# Countries'}, {key:'countriesLabel', label:'Countries', left:true},
   ], r=> `<tr><td class="left">${productCell(r.asin,r.title)}</td><td class="left">${esc(r.brand)}</td>
+    <td class="${r.esRevenue2025>0?'neg-text':''}">${r.esRevenue2025>0?fmtEUR2(r.esRevenue2025):'Never sold'}</td>
+    <td>${r.esRevenue2025>0?fmtNum(r.esUnits2025):'—'}</td>
     <td>${fmtEUR(r.revenue2026)}</td><td>${fmtNum(r.units2026)}</td>
     <td>${r.countryCount}</td><td class="left">${esc(r.countriesLabel)}</td></tr>`, 'revenue2026', 'desc');
 
@@ -1117,7 +1104,7 @@ function renderEsGap(){
     ${banner}
     <div class="grid grid-4 block">${kpis}</div>
     ${insight}
-    <div class="panel block"><div class="panel-title">Germany → Spain gap</div><div class="panel-sub">Sorted by 2026 revenue in Germany &middot; Priority: High = brand already live in Spain and a healthy return rate, Low = return rate notably above the company average</div>${tableContainer('es-gap-de')}</div>
+    <div class="panel block"><div class="panel-title">Germany → Spain gap</div><div class="panel-sub">Sorted by 2026 revenue in Germany &middot; "ES Revenue 2025" shows whether the ASIN was ever sold in Spain — "Never sold" is a fresh-market candidate, a euro amount means it was sold in 2025 and discontinued in 2026 &middot; Priority: High = brand already live in Spain and a healthy return rate, Low = return rate notably above the company average</div>${tableContainer('es-gap-de')}</div>
     <div class="panel"><div class="panel-title">Other countries, not sold in Spain</div><div class="panel-sub">Same gap logic for markets other than Germany &middot; minimum ${fmtEUR(ES_GAP_MIN_REVENUE)} threshold</div>${tableContainer('es-gap-other')}</div>
   </section>`;
 }
