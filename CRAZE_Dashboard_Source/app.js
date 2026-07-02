@@ -236,11 +236,11 @@ function getEsGapRows(){
       const countries = countriesByAsin[p.asin] ? [...countriesByAsin[p.asin]].sort() : [];
       const countriesLabel = countries.length<=3 ? countries.join(', ') : countries.slice(0,3).join(', ')+' +'+(countries.length-3);
       const es = esByAsin[p.asin];
-      // esRevenue2026/esUnits2026 are always 0 here by construction (that's why the ASIN is in this list);
-      // esRevenue2025/esUnits2025 tell "never sold in Spain" (0) apart from "was sold, discontinued" (>0).
+      // esRevenue2025 tells "never sold in Spain" (0) apart from "was sold, discontinued" (>0).
+      // esRevenue2026 would always be 0 here by construction (that's why the ASIN is in this list).
       return {asin:p.asin, brand:p.brand, title:p.title, revenue2026:p.revenue2026, units2026:p.units2026,
         countries, countryCount: countries.length, countriesLabel,
-        esRevenue2025: es ? es.r5 : 0, esUnits2025: es ? es.u5 : 0};
+        esRevenue2025: es ? es.r5 : 0};
     });
 }
 
@@ -274,7 +274,7 @@ function getEsGapDeRows(){
       else if(brandAlreadyInEs && returnRateHealthy) priority = 'High';
       return {asin:r.asin, brand:r.brand, title:r.title, revenueDe2026, unitsDe2026, aovDe2026,
         returnRateDe2026, acosDe2026, brandAlreadyInEs, priority,
-        esRevenue2025:r.esRevenue2025, esUnits2025:r.esUnits2025};
+        esRevenue2025:r.esRevenue2025};
     });
 }
 // ================= Chart.js theme =================
@@ -791,13 +791,12 @@ function renderEsGap(){
 
   registerTable('es-gap-de', deRows, [
     {key:'title', label:'Product', left:true}, {key:'brand', label:'Brand', left:true},
-    {key:'esRevenue2025', label:'ES Revenue 2025'}, {key:'esUnits2025', label:'ES Units 2025'},
+    {key:'esRevenue2025', label:'ES Revenue 2025'},
     {key:'revenueDe2026', label:'Revenue DE 2026'}, {key:'aovDe2026', label:'AOV DE 2026'},
     {key:'returnRateDe2026', label:'Return Rate DE'}, {key:'acosDe2026', label:'ACOS DE 2026'},
     {key:'brandAlreadyInEs', label:'Brand Live in ES'}, {key:'priority', label:'Priority'},
   ], r=> `<tr><td class="left">${productCell(r.asin,r.title)}</td><td class="left">${esc(r.brand)}</td>
     <td class="${r.esRevenue2025>0?'neg-text':''}">${r.esRevenue2025>0?fmtEUR2(r.esRevenue2025):'Never sold'}</td>
-    <td>${r.esRevenue2025>0?fmtNum(r.esUnits2025):'—'}</td>
     <td>${fmtEUR(r.revenueDe2026)}</td><td>${fmtEUR2(r.aovDe2026)}</td>
     <td class="${r.returnRateDe2026!==null && r.returnRateDe2026>SELLIN.overall.returnRate2026*1.5?'neg-text':''}">${fmtPctRaw(r.returnRateDe2026)}</td>
     <td>${r.acosDe2026!==null?fmtPctRaw(r.acosDe2026):'—'}</td>
@@ -806,12 +805,11 @@ function renderEsGap(){
 
   registerTable('es-gap-other', otherRows, [
     {key:'title', label:'Product', left:true}, {key:'brand', label:'Brand', left:true},
-    {key:'esRevenue2025', label:'ES Revenue 2025'}, {key:'esUnits2025', label:'ES Units 2025'},
+    {key:'esRevenue2025', label:'ES Revenue 2025'},
     {key:'revenue2026', label:'Revenue 2026'}, {key:'units2026', label:'Units 2026'},
     {key:'countryCount', label:'# Countries'}, {key:'countriesLabel', label:'Countries', left:true},
   ], r=> `<tr><td class="left">${productCell(r.asin,r.title)}</td><td class="left">${esc(r.brand)}</td>
     <td class="${r.esRevenue2025>0?'neg-text':''}">${r.esRevenue2025>0?fmtEUR2(r.esRevenue2025):'Never sold'}</td>
-    <td>${r.esRevenue2025>0?fmtNum(r.esUnits2025):'—'}</td>
     <td>${fmtEUR(r.revenue2026)}</td><td>${fmtNum(r.units2026)}</td>
     <td>${r.countryCount}</td><td class="left">${esc(r.countriesLabel)}</td></tr>`, 'revenue2026', 'desc');
 
